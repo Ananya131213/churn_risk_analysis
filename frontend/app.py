@@ -19,9 +19,18 @@ try:
 except ImportError as exc:
     BACKEND_ERROR = str(exc)
 
-st.set_page_config("Retention Intelligence", "🎯", layout="wide")
+st.set_page_config("Retention Intelligence", "🎯", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""<style>
-.block-container{padding-top:1.5rem}.hero{padding:1.5rem 1.75rem;border-radius:18px;color:#fff;background:linear-gradient(110deg,#0b4f6c,#1261a0,#1a8e99);margin-bottom:1.25rem}.hero h1{margin:0}.hero p{margin:.35rem 0 0;opacity:.88}[data-testid='stMetric']{background:#fff;border:1px solid #e9edf5;border-radius:14px;padding:16px;box-shadow:0 4px 14px rgba(20,35,70,.05)}</style>""", unsafe_allow_html=True)
+.stApp{background:#f6f8fc}.block-container{max-width:1440px;padding-top:2rem;padding-bottom:3rem}
+[data-testid='stSidebar']{background:linear-gradient(180deg,#102a43 0%,#0b4f6c 100%)}
+[data-testid='stSidebar'] *{color:#f7fbff!important}[data-testid='stSidebar'] [data-baseweb='radio']{padding:4px 0}
+[data-testid='stMetric']{background:#fff;border:1px solid #e8eef7;border-radius:16px;padding:18px;box-shadow:0 8px 20px rgba(28,52,84,.06)}
+[data-testid='stMetricLabel']{font-size:.84rem;color:#61738a!important;font-weight:600}[data-testid='stMetricValue']{color:#102a43}
+[data-testid='stDataFrame']{border:1px solid #e8eef7;border-radius:14px;overflow:hidden}.stButton>button{border-radius:10px;font-weight:650;padding:.55rem 1rem}
+div[data-testid='stVerticalBlockBorderWrapper']{border-radius:16px;border-color:#e4ebf4;background:#fff;box-shadow:0 6px 18px rgba(28,52,84,.035)}
+</style>""", unsafe_allow_html=True)
+px.defaults.template = "plotly_white"
+px.defaults.color_discrete_sequence = ["#1261a0", "#1a8e99", "#f7b267", "#e76f51"]
 
 
 def backend_ready() -> bool:
@@ -45,7 +54,10 @@ def frame(result: Any, source: pd.DataFrame | None = None) -> pd.DataFrame:
 
 
 def data() -> pd.DataFrame | None: return st.session_state.get("predictions")
-def heading(title: str, subtitle: str) -> None: st.markdown(f'<div class="hero"><h1>{title}</h1><p>{subtitle}</p></div>', unsafe_allow_html=True)
+def heading(title: str, subtitle: str) -> None:
+    st.title(title)
+    st.caption(subtitle)
+    st.divider()
 
 
 def dashboard() -> None:
@@ -56,14 +68,21 @@ def dashboard() -> None:
     monthly = pd.to_numeric(df.get("MonthlyCharges", df.get("Monthly Charges", 0)), errors="coerce").fillna(0)
     a,b,c,d = st.columns(4); a.metric("Total Customers", f"{len(df):,}"); b.metric("Average Risk", f"{risk.mean():.1%}"); c.metric("High Risk Customers", f"{high.sum():,}", f"{high.mean():.1%} of base", delta_color="inverse"); d.metric("Revenue At Risk", f"${monthly[high].sum():,.0f}")
     left,right = st.columns(2)
-    left.plotly_chart(px.histogram(df, x="Probability", nbins=12, title="Risk Distribution", color_discrete_sequence=["#1261a0"]), use_container_width=True)
+    with left.container(border=True):
+        st.subheader("Risk distribution", divider="blue")
+        st.plotly_chart(px.histogram(df, x="Probability", nbins=12, color_discrete_sequence=["#1261a0"]).update_layout(margin=dict(l=0,r=0,t=10,b=0), yaxis_title="Customers", xaxis_title="Churn probability"), use_container_width=True)
     segments = segment.value_counts().rename_axis("Risk Segment").reset_index(name="Customers")
-    right.plotly_chart(px.pie(segments, names="Risk Segment", values="Customers", hole=.52, title="Risk Segmentation").update_traces(textinfo="percent+label"), use_container_width=True)
+    with right.container(border=True):
+        st.subheader("Risk segmentation", divider="blue")
+        st.plotly_chart(px.pie(segments, names="Risk Segment", values="Customers", hole=.6).update_traces(textinfo="percent+label").update_layout(margin=dict(l=0,r=0,t=10,b=0)), use_container_width=True)
 
 
 def predictions() -> None:
     heading("Predictions", "Upload a customer file to identify risk across your customer base.")
-    upload = st.file_uploader("Customer CSV", type="csv")
+    with st.container(border=True):
+        st.subheader("Upload customer data")
+        st.caption("Use a CSV with the same fields expected by your prediction backend.")
+        upload = st.file_uploader("Customer CSV", type="csv", label_visibility="collapsed")
     if upload:
         try:
             source = pd.read_csv(upload); st.caption(f"Loaded {len(source):,} customers and {len(source.columns)} fields.")
@@ -73,8 +92,9 @@ def predictions() -> None:
         except Exception as exc: st.error(f"Could not process this CSV: {exc}")
     if data() is not None:
         df = data(); cols = [c for c in ["Customer", "Probability", "Risk Segment"] if c in df]
-        st.dataframe(df[cols] if cols else df, hide_index=True, use_container_width=True)
-        st.download_button("Download predictions CSV", df.to_csv(index=False).encode(), "customer_risk_predictions.csv", "text/csv")
+        st.subheader("Scored customers", divider="blue")
+        st.dataframe(df[cols] if cols else df, hide_index=True, use_container_width=True, height=420)
+        st.download_button("Download predictions CSV", df.to_csv(index=False).encode(), "customer_risk_predictions.csv", "text/csv", type="primary")
 
 
 def risk_analysis() -> None:
@@ -127,7 +147,10 @@ def simulator() -> None:
 
 
 with st.sidebar:
-    st.title("🎯 Retention IQ"); st.caption("Customer Retention Intelligence Agent")
+    st.title("🎯 Retention IQ"); st.caption("CUSTOMER RETENTION INTELLIGENCE")
+    st.divider()
     page = st.radio("Navigation", ["Dashboard", "Predictions", "Risk Analysis", "Retention Advisor", "What-if Simulator"])
+    st.divider()
     if data() is not None: st.success("Prediction data loaded")
+    else: st.caption("No prediction data loaded")
 {"Dashboard":dashboard, "Predictions":predictions, "Risk Analysis":risk_analysis, "Retention Advisor":advisor, "What-if Simulator":simulator}[page]()
